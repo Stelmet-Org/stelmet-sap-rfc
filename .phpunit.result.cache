@@ -1,0 +1,1 @@
+{"version":2,"defects":[],"times":{"ConnectionFactoryTest::testCreateReturnsConnectionInstance":0.006,"ConnectionFactoryTest::testMissingConfigThrowsException":0.001}}
