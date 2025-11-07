@@ -10,9 +10,18 @@
       "email": "c.hancock@grangefencing.co.uk"
     }
   ],
+  "config": {
+    "optimize-autoloader": true,
+    "preferred-install": "dist",
+    "sort-packages": true,
+    "platform": {
+      "php": ">=8.3"
+    }
+  },
   "require": {
-    "php": ">=8.1",
-    "psr/log": "^3.0"
+    "php": ">=8.3",
+    "psr/log": "^3.0",
+    "ext-intl": "*"
   },
   "require-dev": {
     "phpunit/phpunit": "^10.0"
@@ -21,5 +30,12 @@
     "psr-4": {
       "Stelmet\\SapRfc\\": "src/"
     }
+  },
+  "scripts": {
+    "test": "vendor/bin/phpunit"
+  },
+  "support": {
+    "issues": "https://github.com/Stelmet-Org/stelmet-sap-rfc/issues",
+    "source": "https://github.com/Stelmet-Org/stelmet-sap-rfc"
   }
 }

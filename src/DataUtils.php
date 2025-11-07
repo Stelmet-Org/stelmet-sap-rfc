@@ -2,6 +2,8 @@
 
     namespace Stelmet\SapRfc;
 
+    use DateTime;
+
     class DataUtils {
 
         /**

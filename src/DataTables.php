@@ -3,6 +3,7 @@
     namespace Stelmet\SapRfc;
 
     use SAPNWRFC\Connection;
+    use Normalizer;
 
     class DataTables {
 
