@@ -73,6 +73,10 @@
 
             }
 
+            if (isset($parameters["I_TXTONLY"]) && $parameters["I_TXTONLY"] === 'X') {
+                return self::parseTextOnlyData($result["RT_TEXTTAB"]);
+            }
+
             $result = $result["ET_RESULT"] ?? $result["RT_RESULT"] ?? [];
             $meta = $meta["ET_RESULT"] ?? $meta["RT_RESULT"] ?? [];
 
@@ -119,8 +123,71 @@
          * Get metadata for an RFC function (parameters, tables)
          */
         public static function getFunctionMeta($connection, string $functionName): array {
+
             $function = $connection->getFunction($functionName);
+
             return $function->getFunctionDescription();
+        }
+
+        /**
+         * Parse text-only RFC function result into structured array
+         */
+        private static function parseTextOnlyData(array $result): array {
+
+            if (count($result) < 2) {
+                return [];
+            }
+
+            $lines = [];
+            $columnMap = [];
+            $headerLine = $result[1]["LINE"];
+
+            $currentPos = 0;
+
+            while ($currentPos < strlen($headerLine)) {
+
+                if ($headerLine[$currentPos] === '|') {
+
+                    $nextPos = strpos($headerLine, '|', $currentPos + 1);
+                    if ($nextPos === false) {
+                        break;
+                    }
+
+                    $columnName = trim(substr($headerLine, $currentPos + 1, $nextPos - $currentPos - 1));
+                    $columnMap[] = ['name' => $columnName, 'start' => $currentPos + 1, 'length' => $nextPos - $currentPos - 1];
+                    $currentPos = $nextPos;
+
+                } else {
+
+                    $currentPos++;
+
+                }
+
+            }
+
+            for ($i = 0; $i < count($result); $i++) {
+
+                if ($result[$i]["LINE"] === $headerLine) {
+                    continue;
+                }
+
+                if (trim($result[$i]["LINE"], " -") === "") {
+                    continue;
+                }
+
+                $lineData = $result[$i]["LINE"];
+                $lineEntry = [];
+
+                foreach ($columnMap as $col) {
+                    $lineEntry[$col['name']] = trim(substr($lineData, $col['start'], $col['length']));
+                }
+
+                $lines[] = $lineEntry;
+
+            }
+
+            return $lines;
+
         }
 
     }
