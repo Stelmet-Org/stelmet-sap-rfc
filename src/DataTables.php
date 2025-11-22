@@ -2,8 +2,8 @@
 
     namespace Stelmet\SapRfc;
 
-    use SAPNWRFC\Connection;
     use Normalizer;
+    use SAPNWRFC\Connection;
 
     class DataTables {
 
@@ -21,24 +21,36 @@
          */
         public static function getRows(
             Connection $connection,
-            string $tableName,
-            array $fields,
-            int $rowCount = 0,
-            string $delimiter = "|",
-            array $options = [],
+            string     $tableName,
+            array      $fields,
+            int        $rowCount = 0,
+            string     $delimiter = "|",
+            array      $options = [],
+            ?string    $rawDataToDir = null,
         ): array {
 
             $function = $connection->getFunction("RFC_READ_TABLE");
 
             $tableFields = array_map(fn($f) => ["FIELDNAME" => $f], $fields);
 
-            $data = $function->invoke([
-                "QUERY_TABLE" => $tableName,
-                "ROWCOUNT"    => $rowCount,
-                "FIELDS"      => $tableFields,
-                "DELIMITER"   => $delimiter,
-                "OPTIONS"     => $options,
-            ]);
+            $data = $function->invoke(
+                [
+                    "QUERY_TABLE" => $tableName,
+                    "ROWCOUNT"    => $rowCount,
+                    "FIELDS"      => $tableFields,
+                    "DELIMITER"   => $delimiter,
+                    "OPTIONS"     => $options,
+                ],
+            );
+
+            if (is_string($rawDataToDir) && is_dir($rawDataToDir)) {
+
+                if (!str_ends_with($rawDataToDir, DIRECTORY_SEPARATOR)) {
+                    $rawDataToDir .= DIRECTORY_SEPARATOR;
+                }
+                DataUtils::dumpToJson($data, "{$rawDataToDir}{$tableName}_result.json");
+
+            }
 
             return self::parseData($data["FIELDS"], $data["DATA"]);
         }
@@ -48,17 +60,20 @@
          *
          * @param Connection $connection
          * @param string $tableName
+         *
          * @return array Array of field metadata
          */
-        public static function getTableMeta(Connection $connection, string $tableName): array
-        {
+        public static function getTableMeta(Connection $connection, string $tableName): array {
+
             $function = $connection->getFunction("RFC_READ_TABLE");
 
             // Fetch 1 row just to get all FIELDS info
-            $data = $function->invoke([
-                "QUERY_TABLE" => $tableName,
-                "ROWCOUNT"    => 1,
-            ]);
+            $data = $function->invoke(
+                [
+                    "QUERY_TABLE" => $tableName,
+                    "ROWCOUNT"    => 1,
+                ],
+            );
 
             return $data["FIELDS"];
 
@@ -76,6 +91,7 @@
          *
          * @param array $fields Metadata describing each field (FIELDNAME, LENGTH, TYPE, OFFSET)
          * @param array $data Raw rows from SAP RFC (each row contains a "WA" string)
+         *
          * @return array Parsed rows as associative arrays keyed by FIELDNAME
          */
         public static function parseData(array $fields, array $data): array {
@@ -96,7 +112,7 @@
 
                     // Extract the substring corresponding to this field
                     // Use mb_substr to handle multibyte UTF-8 characters correctly
-                    $value = trim(mb_substr($wa, $offset, $len, 'UTF-8'));
+                    $value = trim(mb_substr($wa, $offset, $len, "UTF-8"));
 
                     // Normalize Unicode to composed form (NFC) to avoid mismatches
                     $value = Normalizer::normalize($value, Normalizer::FORM_C);

@@ -15,34 +15,47 @@
          * @param string $variant The variant to use for the query (default: "")
          * @param string $dataToMemory Flag indicating whether to load data to memory (default: "X")
          * @param string $externalPresentation External presentation format (default: "Z")
+         * @param bool $skipSelScreen Whether to skip the selection screen (default: true)
+         * @param string|null $rawDataToDir Optional directory to save raw data files (default: null)
          *
          * @return array The result data from the query execution
          */
         public static function call(
             Connection $connection,
-            string $queryName,
-            string $userGroup = "SYSTQV000074",
-            string $variant = "",
-            string $dataToMemory = "X",
-            string $externalPresentation = "Z",
-            bool $skipSelScreen = true
+            string     $queryName,
+            string     $userGroup = "SYSTQV000074",
+            string     $variant = "",
+            string     $dataToMemory = "X",
+            string     $externalPresentation = "Z",
+            bool       $skipSelScreen = true,
+            ?string    $rawDataToDir = null,
         ): array {
 
             $function = $connection->getFunction("RSAQ_REMOTE_QUERY_CALL");
 
             $params = [
-                "QUERY" => $queryName,
-                "USERGROUP" => $userGroup,
-                "VARIANT" => $variant,
-                "DATA_TO_MEMORY" => $dataToMemory,
+                "QUERY"                 => $queryName,
+                "USERGROUP"             => $userGroup,
+                "VARIANT"               => $variant,
+                "DATA_TO_MEMORY"        => $dataToMemory,
                 "EXTERNAL_PRESENTATION" => $externalPresentation,
-                "SKIP_SELSCREEN" => $skipSelScreen ? "X" : " ",
+                "SKIP_SELSCREEN"        => $skipSelScreen ? "X" : " ",
             ];
 
             $result = $function->invoke($params);
 
             $data = $result["LDATA"];
             $meta = $result["LISTDESC"];
+
+            if (is_string($rawDataToDir) && is_dir($rawDataToDir)) {
+
+                if (!str_ends_with($rawDataToDir, DIRECTORY_SEPARATOR)) {
+                    $rawDataToDir .= DIRECTORY_SEPARATOR;
+                }
+                DataUtils::dumpToJson($result, "{$rawDataToDir}{$queryName}_result.json");
+                DataUtils::dumpToJson($meta, "{$rawDataToDir}{$queryName}_meta.json");
+
+            }
 
             return self::parseLengthPrefixedLines($data, $meta);
 
@@ -120,6 +133,7 @@
          *
          * @param string &$lineData Reference to the line string to parse. Modified in place.
          * @param int $lengthDigits Number of digits used to represent the field length prefix. Default 3.
+         *
          * @return string Extracted field value
          */
         protected static function takeField(string &$lineData, int $lengthDigits = 3): string {

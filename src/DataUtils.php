@@ -16,7 +16,7 @@
         public static function getInvertedDate(DateTime $date): string {
 
             /**
-             * SAP's inverted date format is calulated as follows:
+             * SAP"s inverted date format is calculated as follows:
              * 99999999 - YYYYMMDD
              */
             $dateString = $date->format("Ymd");
@@ -51,26 +51,36 @@
          * Cast RFC field value to proper type. Empty strings are treated as null.
          *
          * @param string $value The field value as string
-         * @param array $typeData The field type data array containing 'type' key
+         * @param array $typeData The field type data array containing "type" key
          * @param string $dateFormat The date format used in the SAP system (default "Ymd")
+         * @param bool $castEmptyDecimalsToNull Whether to cast empty decimal fields to null (default true)
          *
          * @return string|int|float|null The cast value
          */
-        public static function castRFCValue(string $value, array $typeData, string $dateFormat = "Ymd"): string|int|float|null {
+        public static function castRFCValue(
+            string $value,
+            array  $typeData,
+            string $dateFormat = "Ymd",
+            bool   $castEmptyDecimalsToNull = true,
+        ): string|int|float|null {
 
-            $type = $typeData['type'];
+            $type = $typeData["type"];
             $trimmed = trim($value);
 
-            // Convert truly blank fields to null
-            if ($trimmed === '') {
+            if ($trimmed === "") {
+
+                if (in_array($type, ["RFCTYPE_NUM", "RFCTYPE_BCD", "RFCTYPE_FLOAT"], true)) {
+                    return $castEmptyDecimalsToNull ? null : 0;
+                }
+
                 return null;
             }
 
             return match ($type) {
-                "RFCTYPE_NUM" => (int)$trimmed,
+                "RFCTYPE_NUM"                  => (int)$trimmed,
                 "RFCTYPE_BCD", "RFCTYPE_FLOAT" => (float)$trimmed,
-                "RFCTYPE_DATE" => ($trimmed === "00000000") ? null : DateTime::createFromFormat($dateFormat, $trimmed)->format('Y-m-d'),
-                default => $trimmed,
+                "RFCTYPE_DATE"                 => ($trimmed === "00000000") ? null : DateTime::createFromFormat($dateFormat, $trimmed)->format("Y-m-d"),
+                default                        => $trimmed,
             };
         }
 
@@ -84,13 +94,15 @@
          * @return float|int|string|null The cast value
          */
         public static function castValue(string $value, string $type, string $dateFormat = "Ymd"): float|int|string|null {
+
             if ($value === "") {
                 return null;
             }
+
             return match ($type) {
-                "D" => $value === "00000000" ? null : DateTime::createFromFormat($dateFormat, $value)->format('Y-m-d'),
-                "I" => (int)$value,
-                "F" => (float)$value,
+                "D"     => $value === "00000000" ? null : DateTime::createFromFormat($dateFormat, $value)->format("Y-m-d"),
+                "I"     => (int)$value,
+                "F"     => (float)$value,
                 default => $value,
             };
         }
@@ -106,11 +118,43 @@
          * @return bool True if the values are equal up to the specified decimal places, false otherwise
          */
         public static function floatEquals(?float $a, ?float $b, int $decimalPlaced = 5, float $epsilon = 0.00001): bool {
+
             if ($a === null || $b === null) {
                 return $a === $b;
             }
             $factor = pow(10, $decimalPlaced);
+
             return abs(round($a * $factor) - round($b * $factor)) < $epsilon;
+        }
+
+        /**
+         * Dumps data to a JSON file, ensuring unique filenames to avoid overwriting.
+         *
+         * @param mixed $data The data to be dumped to JSON
+         * @param string $filePath The target file path for the JSON file
+         *
+         * @return bool True if the file was successfully written, false otherwise
+         */
+        public static function dumpToJson(array $data, string $filePath): bool {
+
+            $targetDir = dirname($filePath);
+            $fileName = basename($filePath);
+            $fileNameIncrement = 1;
+
+            if (!is_dir($targetDir) || !is_writable($targetDir)) {
+                return false;
+            }
+
+            while (file_exists($targetDir . DIRECTORY_SEPARATOR . $fileName)) {
+                $fileName = pathinfo($filePath, PATHINFO_FILENAME) . " (" . $fileNameIncrement . ").json";
+                $fileNameIncrement++;
+            }
+
+            $fullPath = $targetDir . DIRECTORY_SEPARATOR . $fileName;
+            file_put_contents($fullPath, json_encode($data, JSON_PRETTY_PRINT));
+
+            return true;
+
         }
 
     }
