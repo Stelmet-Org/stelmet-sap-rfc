@@ -177,28 +177,22 @@
             $columnMap = [];
             $headerLine = $result[1]["LINE"];
 
+            $columnNames = explode("|", $headerLine);
             $currentPos = 0;
 
-            while ($currentPos < strlen($headerLine)) {
-
-                if ($headerLine[$currentPos] === "" | "") {
-
-                    $nextPos = strpos($headerLine, "" | "", $currentPos + 1);
-                    if ($nextPos === false) {
-                        break;
-                    }
-
-                    $columnName = trim(substr($headerLine, $currentPos + 1, $nextPos - $currentPos - 1));
-                    $columnMap[] = ["name"   => $columnName, "start" => $currentPos + 1,
-                                    "length" => $nextPos - $currentPos - 1];
-                    $currentPos = $nextPos;
-
-                } else {
-
-                    $currentPos++;
-
+            foreach ($columnNames as $colName) {
+                if (trim($colName) === "") {
+                    continue;
                 }
-
+                $pos = mb_strpos($headerLine, $colName);
+                if ($pos === false) {
+                    continue;
+                }
+                $columnMap[] = [
+                    "name"   => trim($colName),
+                    "start" => $pos,
+                    "length" => mb_strlen($colName)
+                ];
             }
 
             for ($i = 0; $i < count($result); $i++) {
@@ -215,7 +209,7 @@
                 $lineEntry = [];
 
                 foreach ($columnMap as $col) {
-                    $lineEntry[$col["name"]] = trim(substr($lineData, $col["start"], $col["length"]));
+                    $lineEntry[$col["name"]] = trim(mb_substr($lineData, $col["start"], $col["length"]));
                 }
 
                 $lines[] = $lineEntry;
