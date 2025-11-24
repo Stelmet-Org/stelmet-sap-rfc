@@ -18,6 +18,7 @@
          * @param bool $debug Whether to enable debug output (default: false).
          * @param string $dateFormat The date format to use for parsing dates (default: "Ymd").
          * @param string|null $rawDataToDir Directory path to save raw data files (optional).
+         * @param bool|null $castEmptyDecimalsToNull Custom function array for casting text-only data fields (optional).
          *
          * @return array Parsed RFC function result, with tables as structured arrays.
          *
@@ -32,6 +33,7 @@
             string     $dateFormat = "Ymd",
             ?string    $rawDataToDir = null,
             bool       $castEmptyDecimalsToNull = true,
+            ?array     $txtOnlyCastMap = null
         ): array {
 
             $function = $connection->getFunction($functionName);
@@ -92,7 +94,7 @@
             }
 
             if (isset($parameters["I_TXTONLY"]) && $parameters["I_TXTONLY"] === "X") {
-                return self::parseTextOnlyData($result["RT_TEXTTAB"]);
+                return self::parseTextOnlyData($result["RT_TEXTTAB"], $txtOnlyCastMap);
             }
 
             $result = $result["ET_RESULT"] ?? $result["RT_RESULT"] ?? [];
@@ -164,10 +166,11 @@
          * Parse text-only RFC function result into a structured array.
          *
          * @param array $result The text-only result data.
+         * @param array|null $txtOnlyCastMap Optional custom casting functions for specific columns.
          *
          * @return array The parsed structured array.
          */
-        private static function parseTextOnlyData(array $result): array {
+        private static function parseTextOnlyData(array $result, ?array $txtOnlyCastMap = null): array {
 
             if (count($result) < 2) {
                 return [];
@@ -209,7 +212,15 @@
                 $lineEntry = [];
 
                 foreach ($columnMap as $col) {
-                    $lineEntry[$col["name"]] = trim(mb_substr($lineData, $col["start"], $col["length"]));
+
+                    $value = trim(mb_substr($lineData, $col["start"], $col["length"]));
+
+                    if ($txtOnlyCastMap && isset($txtOnlyCastMap[$col["name"]])) {
+                        $value = $txtOnlyCastMap[$col["name"]]($value);
+                    }
+
+                    $lineEntry[$col["name"]] = $value;
+
                 }
 
                 $lines[] = $lineEntry;
