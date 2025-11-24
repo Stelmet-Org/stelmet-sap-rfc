@@ -38,11 +38,8 @@
 
             try {
 
-//                $result = $function->invoke($parameters);
-//                $meta = $function->getFunctionDescription();
-
-                $result = json_decode(file_get_contents("/home/craig-hancock/Downloads/Z_RFCZLEC01_result (3).json"), true);
-                $meta = json_decode(file_get_contents("/home/craig-hancock/Downloads/Z_RFCZLEC01_meta (3).json"), true);
+                $result = $function->invoke($parameters);
+                $meta = $function->getFunctionDescription();
 
                 if (is_string($rawDataToDir) && is_dir($rawDataToDir)) {
 
