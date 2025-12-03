@@ -100,10 +100,22 @@
             }
 
             return match ($type) {
-                "D"     => $value === "00000000" ? null : DateTime::createFromFormat($dateFormat, $value)->format("Y-m-d"),
-                "I"     => (int)$value,
-                "F"     => (float)$value,
-                default => $value,
+
+                "D"      => $value === "00000000"
+                    ? null
+                    : DateTime::createFromFormat($dateFormat, $value)->format("Y-m-d"),
+
+                "T"      => strlen($value) === 6
+                    ? substr($value, 0, 2) . ':' . substr($value, 2, 2) . ':' . substr($value, 4, 2)
+                    : $value,
+
+                // Numeric char fields → don't cast, they have semantic zeros
+                "N"      => $value,
+
+                "I", "B" => (int)$value,
+                "F", "P" => (float)$value,
+                "X"      => $value,
+                default  => $value,
             };
         }
 
