@@ -6,6 +6,13 @@
 
     class ConnectionFactoryTest extends TestCase {
 
+        public static function setUpBeforeClass(): void {
+            // Skip these tests on systems that don't have the compiled SAPNWRFC extension
+            if (!extension_loaded('sapnwrfc') && !class_exists(\SAPNWRFC\Connection::class)) {
+                throw new \PHPUnit\Framework\SkippedTestError('SAPNWRFC extension is not installed; skipping ConnectionFactory tests.');
+            }
+        }
+
         public function testCreateReturnsConnectionInstance() {
 
             // Create a mock of the SAPNWRFC\Connection class
