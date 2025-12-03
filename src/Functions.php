@@ -9,20 +9,46 @@
     class Functions {
 
         /**
+         * Helper utilities for invoking SAP RFC functions and parsing results.
+         *
+         * This class centralises common RFC call patterns used by the project:
+         * - invoking RFC functions via a SAPNWRFC\Connection,
+         * - optionally dumping raw results for debugging,
+         * - converting RFC table rows to PHP types based on typedef metadata,
+         * - special parsing for text-only (fixed-width) table output.
+         */
+
+        /**
          * Invoke an SAP RFC function with structured inputs and parse tables automatically.
          *
-         * @param Connection $connection The SAPNWRFC connection object.
-         * @param string $functionName The name of the RFC function to call.
-         * @param array $parameters Input parameters for the RFC function (key-value pairs).
-         * @param bool $throwOnError Whether to throw an exception on error (default: true).
-         * @param bool $debug Whether to enable debug output (default: false).
-         * @param string $dateFormat The date format to use for parsing dates (default: "Ymd").
-         * @param string|null $rawDataToDir Directory path to save raw data files (optional).
-         * @param bool|null $castEmptyDecimalsToNull Custom function array for casting text-only data fields (optional).
+         * The method will call the specified RFC function using the provided
+         * SAPNWRFC connection, optionally write raw result and metadata JSON
+         * files, and convert any table rows using typedef metadata returned by
+         * the function description.
          *
-         * @return array Parsed RFC function result, with tables as structured arrays.
+         * If the function returns a "text-only" result (indicated by
+         * I_TXTONLY = 'X') this method will forward the output to
+         * parseTextOnlyData() and return a structured array of rows.
          *
-         * @throws RuntimeException If the RFC function call fails and $throwOnError is true.
+         * @param Connection $connection Active SAPNWRFC connection object.
+         * @param string $functionName The RFC function name to invoke (e.g. 'Z_MY_RFC').
+         * @param array $parameters RFC input parameters (associative array of name => value).
+         * @param bool $throwOnError If true (default) rethrows exceptions as RuntimeException;
+         *                           if false it will return an empty array on error.
+         * @param bool $debug Enable debug output to STDERR when an RFC call fails.
+         * @param string $dateFormat The date format used by DataUtils::castRFCValue (default: 'Ymd').
+         * @param string|null $rawDataToDir Optional directory path where raw JSON of result and
+         *                                   metadata will be written. Directory must exist.
+         * @param bool $castEmptyDecimalsToNull When true, empty numeric/decimal fields are cast to null
+         *                                       by DataUtils::castRFCValue; when false they remain as empty strings.
+         * @param array|null $txtOnlyCastMap Optional map for text-only parsing where keys are column names
+         *                                  and values are callables that receive the raw string and
+         *                                  return a casted value.
+         *
+         * @return array Parsed result: for normal table-based RFCs an array of row arrays; for
+         *               text-only results an array of parsed rows as determined by parseTextOnlyData().
+         *
+         * @throws RuntimeException When the underlying RFC call fails and $throwOnError is true.
          */
         public static function call(
             Connection $connection,
@@ -119,12 +145,16 @@
         /**
          * Parse an RFC row using typedef metadata.
          *
-         * @param array $rowData The row data to parse.
-         * @param array $meta The typedef metadata for the row.
-         * @param string $dateFormat The date format to use for parsing dates.
-         * @param bool $castEmptyDecimalsToNull Whether to cast empty decimal fields to null.
+         * Converts each field in the provided row using DataUtils::castRFCValue
+         * and the associated typedef metadata. Unknown fields (no metadata)
+         * are trimmed and preserved as strings.
          *
-         * @return array The parsed row data.
+         * @param array $rowData Associative array of fieldname => raw value as returned by the RFC.
+         * @param array $meta Typedef metadata array for the row (fieldname => typedef info).
+         * @param string $dateFormat Date format passed down to DataUtils::castRFCValue.
+         * @param bool $castEmptyDecimalsToNull See call() documentation; passed to DataUtils::castRFCValue.
+         *
+         * @return array Parsed associative row with proper PHP types (strings, ints, floats, null, DateTime strings, etc.).
          */
         private static function parseRow(array $rowData, array $meta, string $dateFormat, bool $castEmptyDecimalsToNull): array {
 
@@ -150,10 +180,12 @@
         /**
          * Get metadata for an RFC function (parameters, tables).
          *
-         * @param Connection $connection The SAPNWRFC connection object.
-         * @param string $functionName The name of the RFC function.
+         * Convenience wrapper around the underlying SAPNWRFC Function object.
          *
-         * @return array The metadata for the RFC function.
+         * @param Connection $connection Active SAPNWRFC connection instance.
+         * @param string $functionName The RFC function name to inspect.
+         *
+         * @return array Function description metadata as returned by getFunctionDescription().
          */
         public static function getFunctionMeta(Connection $connection, string $functionName): array {
 
@@ -165,10 +197,21 @@
         /**
          * Parse text-only RFC function result into a structured array.
          *
-         * @param array $result The text-only result data.
-         * @param array|null $txtOnlyCastMap Optional custom casting functions for specific columns.
+         * Some RFCs return a single table of lines where the second row contains
+         * a header line that defines fixed-width columns. This helper will
+         * convert that format into an array of associative rows by slicing each
+         * data line according to the header positions.
          *
-         * @return array The parsed structured array.
+         * Expected input structure: an array of rows where each row is an array
+         * containing a 'LINE' key with the raw line string. The header is taken
+         * from the second entry (index 1) of $result.
+         *
+         * @param array $result Raw RFC table result where each entry has a 'LINE' key.
+         * @param array|null $txtOnlyCastMap Optional associative map of columnName => callable
+         *                                  used to transform each extracted string value.
+         *
+         * @return array Array of associative rows (columnName => value). Returns an empty array
+         *               if the input doesn't contain enough lines to parse a header and data.
          */
         private static function parseTextOnlyData(array $result, ?array $txtOnlyCastMap = null): array {
 
@@ -176,27 +219,10 @@
                 return [];
             }
 
-            $lines = [];
-            $columnMap = [];
             $headerLine = $result[1]["LINE"];
+            $columnMap = self::parseTextOnlyHeader($headerLine);
 
-            $columnNames = explode("|", $headerLine);
-            $currentPos = 0;
-
-            foreach ($columnNames as $colName) {
-                if (trim($colName) === "") {
-                    continue;
-                }
-                $pos = mb_strpos($headerLine, $colName);
-                if ($pos === false) {
-                    continue;
-                }
-                $columnMap[] = [
-                    "name"   => trim($colName),
-                    "start" => $pos,
-                    "length" => mb_strlen($colName)
-                ];
-            }
+            $lines = [];
 
             for ($i = 0; $i < count($result); $i++) {
 
@@ -228,6 +254,59 @@
             }
 
             return $lines;
+
+        }
+
+        /**
+         * Build a column map for a fixed-width header line.
+         *
+         * Parses a header line where column names are separated by pipe characters ("|")
+         * but the underlying output is fixed-width (each column has a start and length).
+         * This function returns an ordered list of column descriptor arrays:
+         *  [ ['name' => string, 'start' => int, 'length' => int], ... ]
+         *
+         * @param string $headerLine The header line containing pipe-separated column names.
+         * @return array Ordered list of column descriptors with keys: name, start, length.
+         */
+        private static function parseTextOnlyHeader(string $headerLine): array {
+
+            $columnMap = [];
+            $seenNames = [];
+
+            $columnNames = explode("|", $headerLine);
+
+            foreach ($columnNames as $colName) {
+
+                if (trim($colName) === "") {
+                    continue;
+                }
+
+                $pos = mb_strpos($headerLine, $colName);
+                if ($pos === false) {
+                    continue;
+                }
+
+                $colLength = mb_strlen($colName);
+                $baseName = trim($colName);
+                $colName = trim($colName);
+                $suffix = 1;
+
+                while (in_array($colName, $seenNames, true)) {
+                    $colName = $baseName . "_" . $suffix;
+                    $suffix++;
+                }
+
+                $seenNames[] = $colName;
+
+                $columnMap[] = [
+                    "name"   => $colName,
+                    "start"  => $pos,
+                    "length" => $colLength
+                ];
+
+            }
+
+            return $columnMap;
 
         }
 

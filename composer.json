@@ -2,7 +2,7 @@
   "name": "stelmet/sap-rfc",
   "description": "SAP RFC connection library for PHP",
   "type": "library",
-  "license": "proprietary",
+  "license": "MIT",
   "minimum-stability": "stable",
   "authors": [
     {
@@ -15,12 +15,12 @@
     "preferred-install": "dist",
     "sort-packages": true,
     "platform": {
-      "php": ">=8.3"
+      "php": "8.3.0"
     }
   },
   "require": {
     "php": ">=8.3",
-    "psr/log": "^3.0",
+    "psr/log": "3.0.2",
     "ext-intl": "*",
     "ext-mbstring": "*"
   },
