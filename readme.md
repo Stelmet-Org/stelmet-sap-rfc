@@ -1,14 +1,23 @@
 # SAP RFC Connection — Setup Guide
 
+<p>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://packagist.org/packages/stelmet/sap-rfc"><img src="https://img.shields.io/badge/php-%3E%3D8.3-blue.svg" alt="PHP >= 8.3"></a>
+  <a href="https://packagist.org/packages/psr/log"><img src="https://img.shields.io/badge/psr--log-%5E3.0-blue.svg" alt="psr/log"></a>
+  <a href="https://www.php.net/manual/en/book.intl.php"><img src="https://img.shields.io/badge/ext--intl-required-green.svg" alt="ext-intl"></a>
+  <a href="https://www.php.net/manual/en/book.mbstring.php"><img src="https://img.shields.io/badge/ext--mbstring-required-green.svg" alt="ext-mbstring"></a>
+  <a href="https://packagist.org/packages/phpunit/phpunit"><img src="https://img.shields.io/badge/phpunit-%5E10.0-lightgrey.svg" alt="phpunit"></a>
+</p>
+
 This document explains how to configure and use the `ConnectionFactory` in this repository to create SAP RFC connections.
 
-This README focuses on the connection setup and a small test script to verify connectivity.
+This README focuses on the connection setup and a small test script to verify connectivity. The repository now includes a small example script and a `.env.example` to simplify local testing.
 
 ---
 
 ## Requirements
 
-- PHP 8.0+ (the code uses typed properties and null-safe operator)
+- PHP >= 8.3 (specified in composer.json)
 - The SAP NW RFC PHP extension (commonly exposed as the `sapnwrfc` or `SAPNWRFC` extension). Ensure the extension is installed and enabled in your `php.ini`.
 - Composer dependencies installed (`composer install`).
 - Access to the SAP system (network, credentials, and permissions).
@@ -27,6 +36,12 @@ By default `ConnectionFactory` reads connection values from environment variable
 You can also pass these parameters programmatically as an overrides array when creating a connection (see below).
 
 
+## Included example files
+
+- `scripts/test_connection.php` — a small CLI script that demonstrates constructing `ConnectionFactory` and attempting a connection (useful for one-off checks).
+- `.env.example` — example environment file showing variable names and example values to copy to `.env` or use in deployment.
+
+
 ## Installation
 
 1. Install PHP extension for SAP RFC. How you install this depends on your platform and the extension distribution you use. Check your SAP connector vendor docs. After installing, verify it's loaded:
@@ -42,6 +57,7 @@ You should see the extension listed (e.g. `sapnwrfc` or `SAPNWRFC`).
 ```bash
 composer install
 ```
+
 
 
 ## Using `ConnectionFactory`
@@ -84,7 +100,7 @@ try {
     // Use the $connection as needed (see SAPNWRFC extension docs)
 
     // close connection when finished (extension may provide a close/disconnect method)
-    // $connection->close(); // check extension API
+    // if (method_exists($connection, 'close')) { $connection->close(); }
 
 } catch (\InvalidArgumentException $e) {
     echo "Missing configuration: " . $e->getMessage() . "\n";
@@ -96,11 +112,9 @@ try {
 ```
 
 
-## Minimal test script
+## Quick test (CLI)
 
-Create a file `scripts/test_connection.php` (or run inline) with the example above to verify a connection.
-
-Run it from CLI after setting environment variables (or use programmatic overrides):
+1. Copy `.env.example` to `.env` or export variables in your shell, e.g.:
 
 ```bash
 export SAP_RFC_ASHOST=sap.example.com
@@ -108,11 +122,15 @@ export SAP_RFC_SYSNR=00
 export SAP_RFC_CLIENT=100
 export SAP_RFC_USER=MYUSER
 export SAP_RFC_PASSWD=MYPASSWORD
+```
 
+2. Run the included test script:
+
+```bash
 php scripts/test_connection.php
 ```
 
-Expected outcome: either the script connects successfully (no exceptions) or it prints a helpful error message.
+Expected outcome: the script will attempt to create a connection and will exit with a non-zero code and a helpful message if configuration or connectivity fails.
 
 
 ## Logging
@@ -139,7 +157,5 @@ Expected outcome: either the script connects successfully (no exceptions) or it 
 - Add a small integration test harness (requires access to a test SAP system).
 - Provide a sample `.env.example` or environment setup helper for local development.
 
-
 ---
 
-If you'd like, I can also add the `scripts/test_connection.php` example file to the repo and a `.env.example`. Which would you prefer?

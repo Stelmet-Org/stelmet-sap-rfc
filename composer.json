@@ -2,7 +2,7 @@
   "name": "stelmet/sap-rfc",
   "description": "SAP RFC connection library for PHP",
   "type": "library",
-  "license": "proprietary",
+  "license": "MIT",
   "minimum-stability": "stable",
   "authors": [
     {
