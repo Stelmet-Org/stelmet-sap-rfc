@@ -44,7 +44,7 @@
 
             try {
 
-                return $function->invoke($params);
+                $result = $function->invoke($params);
 
             } catch (\SAPNWRFC\FunctionCallException $e) {
 
