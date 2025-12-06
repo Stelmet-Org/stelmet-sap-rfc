@@ -23,6 +23,7 @@
 
         /** Marker operator value used internally to denote an OR group condition */
         public const string OR_GROUP = "OR_GROUP";
+        public const string AND_GROUP = "AND_GROUP";
 
         /**
          * @var array<int,string> Temporary holder for output lines (unused in current implementation,
@@ -161,6 +162,42 @@
         }
 
         /**
+         * Add an AND group for a field.
+         *
+         * Example: addAndGroup('MTART', ['FERT', 'HAWA'])
+         * Produces: "(MTART NE 'FERT' AND MTART NE 'HAWA')"
+         *
+         * Each value in $values will be paired with $field using $operator and combined
+         * with "AND". The entire group is wrapped in parentheses when converted.
+         *
+         * @param string $field Field name to which the AND group applies
+         * @param string[] $values List of values to ANDOR together
+         * @param string $operator Optional operator to apply to each value (defaults to NE)
+         *
+         * @return $this
+         * @throws InvalidArgumentException If provided operator is not allowed
+         */
+        public function addAndGroup(string $field, array $values, string $operator = self::OP_NE): self {
+
+            if (!$this->operatorValid($operator)) {
+                throw new InvalidArgumentException("Invalid operator '$operator' for AND group");
+            }
+
+            if (empty($values)) {
+                return $this;
+            }
+
+            $this->conditions[] = [
+                "field"       => $field,
+                "operator"    => self::AND_GROUP,
+                "value"       => $values,
+                "subOperator" => $operator,
+            ];
+
+            return $this;
+        }
+
+        /**
          * Convert the accumulated conditions into a SAP RFC_READ_TABLE OPTIONS array.
          *
          * SAP expects each line to be no longer than 72 characters, and multiple conditions
@@ -217,6 +254,8 @@
          *   * numeric values are left as-is
          * - For OR_GROUP entries this recursively creates sub-expressions for each value
          *   and joins them with " OR ", wrapping the joined sub-expressions in parentheses.
+         * - For AND_GROUP entries this recursively creates sub-expressions for each value
+         *  and joins them with " AND ", wrapping the joined sub-expressions in parentheses.
          *
          * @param array<string,mixed> $condition Condition entry from $this->conditions
          *
@@ -241,6 +280,28 @@
                 }
 
                 $joined = implode(" OR ", $subExpressions);
+
+                return "($joined)";
+
+            }
+
+            if ($condition["operator"] === self::AND_GROUP) {
+
+                $subExpressions = [];
+
+                foreach ($condition["value"] as $val) {
+
+                    $subExpressions[] = $this->buildExpressionLine(
+                        [
+                            "field"    => $condition["field"],
+                            "operator" => $condition["subOperator"],
+                            "value"    => $val,
+                        ],
+                    );
+
+                }
+
+                $joined = implode(" AND ", $subExpressions);
 
                 return "($joined)";
 

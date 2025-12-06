@@ -42,7 +42,22 @@
                 "SKIP_SELSCREEN"        => $skipSelScreen ? "X" : " ",
             ];
 
-            $result = $function->invoke($params);
+            try {
+
+                return $function->invoke($params);
+
+            } catch (\SAPNWRFC\FunctionCallException $e) {
+
+                $errorInfo = $e->getErrorInfo();
+                $key       = $errorInfo['key'] ?? null;
+
+                if ($key === 'NO_DATA_SELECTED') {
+                    return [];
+                }
+
+                throw new \RuntimeException("Error calling RSAQ_REMOTE_QUERY_CALL: " . $e->getMessage() . ": " . $errorInfo["key"], 0, $e);
+
+            }
 
             $data = $result["LDATA"];
             $meta = $result["LISTDESC"];

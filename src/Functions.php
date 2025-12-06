@@ -219,6 +219,22 @@
                 return [];
             }
 
+            /**
+             * If only 5 lines and the number of | in the header row does not match the number of columns
+             * in the 4th row. This is due to SAP returning no data rows, only header and footer.
+             * In this case, return an empty array.
+             */
+            if (count($result) === 5) {
+                $headerLine = $result[1]["LINE"];
+                $dataLine = $result[3]["LINE"];
+                $numHeaderCols = substr_count($headerLine, "|");
+                $numDataCols = substr_count($dataLine, " ") + 1; // Approximate column count by spaces
+
+                if ($numHeaderCols !== $numDataCols) {
+                    return [];
+                }
+            }
+
             $headerLine = $result[1]["LINE"];
             $columnMap = self::parseTextOnlyHeader($headerLine);
 
