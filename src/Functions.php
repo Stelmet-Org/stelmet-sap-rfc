@@ -30,6 +30,17 @@
          * I_TXTONLY = 'X') this method will forward the output to
          * parseTextOnlyData() and return a structured array of rows.
          *
+         * Example usage with a custom caster:
+         *
+         * $custom = [
+         *     'MY_COLUMN' => function($raw, $type = null, $dateFormat = null, $castEmptyDecimals = null) {
+         *         // Return a transformed value; for example convert empty strings to null
+         *         $v = trim($raw);
+         *         return $v === '' ? null : $v;
+         *     }
+         * ];
+         * $rows = Functions::call($conn, 'Z_MY_RFC', ['I_TXTONLY' => 'X'], true, false, 'Ymd', null, true, $custom);
+         *
          * @param Connection $connection Active SAPNWRFC connection object.
          * @param string $functionName The RFC function name to invoke (e.g. 'Z_MY_RFC').
          * @param array $parameters RFC input parameters (associative array of name => value).
@@ -41,9 +52,11 @@
          *                                   metadata will be written. Directory must exist.
          * @param bool $castEmptyDecimalsToNull When true, empty numeric/decimal fields are cast to null
          *                                       by DataUtils::castRFCValue; when false they remain as empty strings.
-         * @param array|null $txtOnlyCastMap Optional map for text-only parsing where keys are column names
+         * @param array|null $customCastMap Optional map for text-only parsing where keys are column names
          *                                  and values are callables that receive the raw string and
-         *                                  return a casted value.
+         *                                  return a cast value. Callables will be invoked with the
+         *                                  signature: ($rawValue)
+         * @param string $resultKey The key in the RFC result array that contains the main table data
          *
          * @return array Parsed result: for normal table-based RFCs an array of row arrays; for
          *               text-only results an array of parsed rows as determined by parseTextOnlyData().
@@ -59,7 +72,8 @@
             string     $dateFormat = "Ymd",
             ?string    $rawDataToDir = null,
             bool       $castEmptyDecimalsToNull = true,
-            ?array     $txtOnlyCastMap = null
+            ?array     $customCastMap = null,
+            string     $resultKey = "RT_RESULT"
         ): array {
 
             $function = $connection->getFunction($functionName);
@@ -120,21 +134,21 @@
             }
 
             if (isset($parameters["I_TXTONLY"]) && $parameters["I_TXTONLY"] === "X") {
-                return self::parseTextOnlyData($result["RT_TEXTTAB"], $txtOnlyCastMap);
+                return self::parseTextOnlyData($result["RT_TEXTTAB"], $customCastMap);
             }
 
-            $result = $result["ET_RESULT"] ?? $result["RT_RESULT"] ?? [];
-            $meta = $meta["ET_RESULT"] ?? $meta["RT_RESULT"] ?? [];
+            $result = $result[$resultKey] ?? [];
+            $meta = $meta[$resultKey] ?? [];
 
             if (!isset($meta["typedef"])) {
                 print("[WARN] No typedef metadata for RFC function table result: $functionName\n");
 
-                return [];
+                return $result;
             }
 
             foreach ($result as &$row) {
 
-                $row = self::parseRow($row, $meta["typedef"], $dateFormat, $castEmptyDecimalsToNull);
+                $row = self::parseRow($row, $meta["typedef"], $dateFormat, $castEmptyDecimalsToNull, $customCastMap);
 
             }
 
@@ -153,14 +167,25 @@
          * @param array $meta Typedef metadata array for the row (fieldname => typedef info).
          * @param string $dateFormat Date format passed down to DataUtils::castRFCValue.
          * @param bool $castEmptyDecimalsToNull See call() documentation; passed to DataUtils::castRFCValue.
+         * @param array|null $customCastMap Optional map for text-only parsing where keys are column names
+         *                                  and values are callables that will receive the raw field value
+         *                                  and may return a custom casted value.
          *
          * @return array Parsed associative row with proper PHP types (strings, ints, floats, null, DateTime strings, etc.).
          */
-        private static function parseRow(array $rowData, array $meta, string $dateFormat, bool $castEmptyDecimalsToNull): array {
+        private static function parseRow(array $rowData, array $meta, string $dateFormat, bool $castEmptyDecimalsToNull, ?array $customCastMap = null): array {
 
             $result = [];
 
             foreach ($rowData as $fieldName => $fieldValue) {
+
+                /*
+                 * If a custom caster exists for this field, use it. The callable is given the raw field value
+                 */
+                if ($customCastMap && isset($customCastMap[$fieldName]) && is_callable($customCastMap[$fieldName])) {
+                    $result[$fieldName] = $customCastMap[$fieldName]($fieldValue);
+                    continue;
+                }
 
                 $typeData = $meta[$fieldName] ?? null;
 
@@ -207,13 +232,13 @@
          * from the second entry (index 1) of $result.
          *
          * @param array $result Raw RFC table result where each entry has a 'LINE' key.
-         * @param array|null $txtOnlyCastMap Optional associative map of columnName => callable
+         * @param array|null $customCastMap Optional associative map of columnName => callable
          *                                  used to transform each extracted string value.
          *
          * @return array Array of associative rows (columnName => value). Returns an empty array
          *               if the input doesn't contain enough lines to parse a header and data.
          */
-        private static function parseTextOnlyData(array $result, ?array $txtOnlyCastMap = null): array {
+        private static function parseTextOnlyData(array $result, ?array $customCastMap = null): array {
 
             if (count($result) < 2) {
                 return [];
@@ -257,8 +282,8 @@
 
                     $value = trim(mb_substr($lineData, $col["start"], $col["length"]));
 
-                    if ($txtOnlyCastMap && isset($txtOnlyCastMap[$col["name"]])) {
-                        $value = $txtOnlyCastMap[$col["name"]]($value);
+                    if ($customCastMap && isset($customCastMap[$col["name"]]) && is_callable($customCastMap[$col["name"]])) {
+                        $value = $customCastMap[$col["name"]]($value);
                     }
 
                     $lineEntry[$col["name"]] = $value;
