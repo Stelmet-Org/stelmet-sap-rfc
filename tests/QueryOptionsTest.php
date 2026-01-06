@@ -68,4 +68,56 @@
             $this->assertStringContainsString("MATKL EQ 'WG01'", $lines[4]['TEXT']);
         }
 
+        // New tests for QOL features
+
+        public function testAddRawPreservesText(): void {
+            $raw = "FIELDX EQ 'A' OR FIELDY EQ 'B'";
+            $opts = (new QueryOptions())->addRaw($raw);
+            $this->assertEquals([['TEXT' => $raw]], $opts->toSapOptions());
+        }
+
+        public function testClearRemovesConditions(): void {
+            $opts = (new QueryOptions())
+                ->addEqualCondition('A', '1')
+                ->addEqualCondition('B', '2');
+
+            $this->assertNotEmpty($opts->getConditions());
+
+            $opts->clear();
+
+            $this->assertEmpty($opts->getConditions());
+            $this->assertEquals([], $opts->toSapOptions());
+        }
+
+        public function testSetAndGetMaxLineLength(): void {
+            $opts = new QueryOptions();
+            $this->assertEquals(72, $opts->getMaxLineLength());
+
+            $opts->setMaxLineLength(40);
+            $this->assertEquals(40, $opts->getMaxLineLength());
+
+            // small sanity check: low but allowed value splits long OR groups
+            $values = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE'];
+            $lines = $opts->addOrGroup('FLD', $values)->toSapOptions();
+            foreach ($lines as $line) {
+                $this->assertLessThanOrEqual(40, strlen($line['TEXT']));
+            }
+        }
+
+        public function testSingleQuoteEscaping(): void {
+            $opts = (new QueryOptions())->addEqualCondition('NAME', "O'Reilly");
+            $lines = $opts->toSapOptions();
+
+            $this->assertCount(1, $lines);
+            $this->assertEquals("NAME EQ 'O''Reilly'", $lines[0]['TEXT']);
+        }
+
+        public function testAddAndGroupProducesParenthesisedAndExpression(): void {
+            $opts = (new QueryOptions())->addAndGroup('MTART', ['FERT', 'HAWA']);
+            $lines = $opts->toSapOptions();
+
+            $this->assertCount(1, $lines);
+            $this->assertEquals("(MTART NE 'FERT' AND MTART NE 'HAWA')", $lines[0]['TEXT']);
+        }
+
     }

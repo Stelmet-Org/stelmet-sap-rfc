@@ -55,6 +55,12 @@
         ];
 
         /**
+         * Maximum allowed length for each OPTIONS line. Default 72 as required by SAP.
+         * @var int
+         */
+        private int $maxLineLength = 72;
+
+        /**
          * Validate whether an operator is allowed.
          *
          * The check is strict (type and value).
@@ -63,7 +69,7 @@
          *
          * @return bool True when $operator is one of the allowed operators
          */
-        function operatorValid(string $operator): bool {
+        protected function operatorValid(string $operator): bool {
 
             return in_array($operator, $this->allowedOperators, true);
         }
@@ -198,6 +204,59 @@
         }
 
         /**
+         * Add a raw OPTIONS line. Useful for advanced/edge cases where you need to pass
+         * a preformatted condition directly to SAP. The provided text will be used as-is
+         * (no automatic quoting or splitting beyond the normal max line length).
+         *
+         * @param string $text Raw condition text
+         * @return $this
+         */
+        public function addRaw(string $text): self {
+            if ($text === "") {
+                return $this;
+            }
+
+            $this->conditions[] = [
+                "raw" => $text,
+            ];
+
+            return $this;
+        }
+
+        /**
+         * Clear all accumulated conditions.
+         *
+         * @return $this
+         */
+        public function clear(): self {
+            $this->conditions = [];
+            return $this;
+        }
+
+        /**
+         * Configure the maximum length for OPTIONS lines (default 72).
+         *
+         * @param int $length
+         * @return $this
+         */
+        public function setMaxLineLength(int $length): self {
+            if ($length < 10) {
+                throw new InvalidArgumentException("maxLineLength must be at least 10");
+            }
+            $this->maxLineLength = $length;
+            return $this;
+        }
+
+        /**
+         * Get the configured max line length.
+         *
+         * @return int
+         */
+        public function getMaxLineLength(): int {
+            return $this->maxLineLength;
+        }
+
+        /**
          * Convert the accumulated conditions into a SAP RFC_READ_TABLE OPTIONS array.
          *
          * SAP expects each line to be no longer than 72 characters, and multiple conditions
@@ -261,7 +320,11 @@
          *
          * @return string Expression string (may contain parentheses for OR groups)
          */
-        function buildExpressionLine(array $condition): string {
+        protected function buildExpressionLine(array $condition): string {
+
+            if (array_key_exists("raw", $condition)) {
+                return (string)$condition["raw"];
+            }
 
             if ($condition["operator"] === self::OR_GROUP) {
 
@@ -310,7 +373,9 @@
             $value = $condition["value"];
 
             if (is_string($value)) {
-                $value = "'" . $value . "'";
+                // Escape single quotes by doubling them (common SAP/SQL-style escaping)
+                $escaped = str_replace("'", "''", $value);
+                $value = "'" . $escaped . "'";
             }
 
             return "{$condition["field"]} {$condition["operator"]} $value";
@@ -322,26 +387,51 @@
          *
          * SAP expects each OPTIONS line no longer than 72 characters. This method attempts
          * to split on spaces and returns an array of line strings, each <= 72 characters,
-         * except in pathological cases where a single "word" is longer than 72 characters.
+         * except in pathological cases where a single "word" is longer than the max length.
+         * In that case the long "word" will be chunked.
          *
          * @param string $expression Full expression to split
          *
          * @return string[] Array of lines
          */
-        function splitLongExpressionLine(string $expression): array {
+        protected function splitLongExpressionLine(string $expression): array {
+
+            $max = $this->maxLineLength;
 
             $words = explode(" ", $expression);
             $lines = [];
             $currentLine = "";
 
             foreach ($words as $word) {
-                if (strlen($currentLine . ($currentLine === "" ? "" : " ") . $word) > 72) {
+                // If a single word is longer than the max, chunk it to avoid infinite loops
+                if (strlen($word) > $max) {
+                    // flush current line first
+                    if ($currentLine !== "") {
+                        $lines[] = $currentLine;
+                        $currentLine = "";
+                    }
+
+                    // chunk the long word
+                    $offset = 0;
+                    $len = strlen($word);
+                    while ($offset < $len) {
+                        $chunk = substr($word, $offset, $max);
+                        $lines[] = $chunk;
+                        $offset += $max;
+                    }
+
+                    continue;
+                }
+
+                $candidate = $currentLine . ($currentLine === "" ? "" : " ") . $word;
+
+                if (strlen($candidate) > $max) {
                     if ($currentLine !== "") {
                         $lines[] = $currentLine;
                     }
                     $currentLine = $word;
                 } else {
-                    $currentLine .= ($currentLine === "" ? "" : " ") . $word;
+                    $currentLine = $candidate;
                 }
             }
 
