@@ -56,7 +56,7 @@
          *                                  and values are callables that receive the raw string and
          *                                  return a cast value. Callables will be invoked with the
          *                                  signature: ($rawValue)
-         * @param string $resultKey The key in the RFC result array that contains the main table data
+         * @param string|array $resultKey The key in the RFC result array that contains the main table data, or an array of keys if multiple tables are expected. Default is "RT_RESULT".
          *
          * @return array Parsed result: for normal table-based RFCs an array of row arrays; for
          *               text-only results an array of parsed rows as determined by parseTextOnlyData().
@@ -64,16 +64,16 @@
          * @throws RuntimeException When the underlying RFC call fails and $throwOnError is true.
          */
         public static function call(
-            Connection $connection,
-            string     $functionName,
-            array      $parameters = [],
-            bool       $throwOnError = true,
-            bool       $debug = false,
-            string     $dateFormat = "Ymd",
-            ?string    $rawDataToDir = null,
-            bool       $castEmptyDecimalsToNull = true,
-            ?array     $customCastMap = null,
-            string     $resultKey = "RT_RESULT"
+            Connection   $connection,
+            string       $functionName,
+            array        $parameters = [],
+            bool         $throwOnError = true,
+            bool         $debug = false,
+            string       $dateFormat = "Ymd",
+            ?string      $rawDataToDir = null,
+            bool         $castEmptyDecimalsToNull = true,
+            ?array       $customCastMap = null,
+            string|array $resultKey = "RT_RESULT",
         ): array {
 
             $function = $connection->getFunction($functionName);
@@ -137,6 +137,27 @@
                 return self::parseTextOnlyData($result["RT_TEXTTAB"], $customCastMap);
             }
 
+            if (is_array($resultKey)) {
+
+                $output = [];
+
+                foreach ($resultKey as $rk) {
+
+                    $output[$rk] = $result[$rk] ?? [];
+                    $meta = $meta[$rk] ?? [];
+
+                    foreach ($output[$rk] as &$row) {
+
+                        $row = self::parseRow($row, $meta["typedef"], $dateFormat, $castEmptyDecimalsToNull, $customCastMap);
+
+                    }
+
+                }
+
+                return $output;
+
+            }
+
             $result = $result[$resultKey] ?? [];
             $meta = $meta[$resultKey] ?? [];
 
@@ -163,13 +184,13 @@
          * and the associated typedef metadata. Unknown fields (no metadata)
          * are trimmed and preserved as strings.
          *
-         * @param array $rowData Associative array of fieldname => raw value as returned by the RFC.
-         * @param array $meta Typedef metadata array for the row (fieldname => typedef info).
+         * @param array $rowData Associative array of field-name => raw value as returned by the RFC.
+         * @param array $meta Typedef metadata array for the row (field-name => typedef info).
          * @param string $dateFormat Date format passed down to DataUtils::castRFCValue.
          * @param bool $castEmptyDecimalsToNull See call() documentation; passed to DataUtils::castRFCValue.
          * @param array|null $customCastMap Optional map for text-only parsing where keys are column names
          *                                  and values are callables that will receive the raw field value
-         *                                  and may return a custom casted value.
+         *                                  and may return a custom cast value.
          *
          * @return array Parsed associative row with proper PHP types (strings, ints, floats, null, DateTime strings, etc.).
          */
@@ -307,6 +328,7 @@
          *  [ ['name' => string, 'start' => int, 'length' => int], ... ]
          *
          * @param string $headerLine The header line containing pipe-separated column names.
+         *
          * @return array Ordered list of column descriptors with keys: name, start, length.
          */
         private static function parseTextOnlyHeader(string $headerLine): array {
@@ -342,7 +364,7 @@
                 $columnMap[] = [
                     "name"   => $colName,
                     "start"  => $pos,
-                    "length" => $colLength
+                    "length" => $colLength,
                 ];
 
             }
