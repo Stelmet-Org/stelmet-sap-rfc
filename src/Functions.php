@@ -144,11 +144,11 @@
                 foreach ($resultKey as $rk) {
 
                     $output[$rk] = $result[$rk] ?? [];
-                    $meta = $meta[$rk] ?? [];
+                    $metaMeta = $meta[$rk] ?? [];
 
                     foreach ($output[$rk] as &$row) {
 
-                        $row = self::parseRow($row, $meta["typedef"], $dateFormat, $castEmptyDecimalsToNull, $customCastMap);
+                        $row = self::parseRow($row, $metaMeta["typedef"], $dateFormat, $castEmptyDecimalsToNull, $customCastMap);
 
                     }
 
