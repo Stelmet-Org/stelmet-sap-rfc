@@ -20,6 +20,8 @@
         public const string OP_LE = "LE";
         /** Pattern match operator (like SQL LIKE) */
         public const string OP_CP = "CP";
+        /** Between operator: matches rows where field is between two values (inclusive) */
+        public const string OP_BT = "BT";
 
         /** Marker operator value used internally to denote an OR group condition */
         public const string OR_GROUP = "OR_GROUP";
@@ -52,6 +54,7 @@
             self::OP_GE,
             self::OP_LE,
             self::OP_CP,
+            self::OP_BT,
         ];
 
         /**
@@ -302,6 +305,120 @@
             }
 
             return $lines;
+
+        }
+
+        /**
+         * Add a RANGE table condition (for SAP SELECT-OPTION / RANGE parameters).
+         *
+         * Unlike toSapOptions() which builds WHERE-clause style TEXT lines, range conditions
+         * are passed as structured table rows with SIGN, OPTION, LOW, HIGH fields.
+         *
+         * @param string $field     The RANGE table parameter name (must be uppercase, e.g. 'T_S0BUKRS')
+         * @param string $sign      'I' (include) or 'E' (exclude)
+         * @param string $operator  One of the OP_* constants (EQ, NE, BT, GT, LT, GE, LE, CP)
+         * @param string|int|float $low   Lower value (or the only value for EQ etc.)
+         * @param string|int|float $high  Upper value (only used for BT ranges, otherwise '')
+         *
+         * @return $this
+         */
+        public function addRangeCondition(
+            string           $field,
+            string           $sign,
+            string|int|float $low,
+            string|int|float $high = "",
+        ): self {
+
+            $sign = strtoupper($sign);
+
+            if (!in_array($sign, ["I", "E"], true)) {
+                throw new InvalidArgumentException("Invalid SIGN '$sign'. Must be 'I' (include) or 'E' (exclude).");
+            }
+
+            $this->conditions[] = [
+                "field"    => strtoupper($field),
+                "operator" => "RANGE",
+                "sign"     => $sign,
+                "option"   => self::OP_BT,
+                "low"      => (string)$low,
+                "high"     => (string)$high,
+            ];
+
+            return $this;
+        }
+
+        /**
+         * Convenience method: add an inclusive RANGE EQ condition (the most common case).
+         *
+         * Equivalent to: SIGN=I, OPTION=EQ, LOW=$value
+         *
+         * @param string $field
+         * @param string|int|float $value
+         * @return $this
+         */
+        public function addRangeEqual(string $field, string|int|float $value): self {
+            return $this->addRangeCondition($field, "I", self::OP_EQ, $value);
+        }
+
+        /**
+         * Convenience method: add an inclusive RANGE BT (between) condition.
+         *
+         * Equivalent to: SIGN=I, OPTION=BT, LOW=$from, HIGH=$to
+         *
+         * @param string $field
+         * @param string|int|float $from
+         * @param string|int|float $to
+         * @return $this
+         */
+        public function addRangeBetween(string $field, string|int|float $from, string|int|float $to): self {
+            return $this->addRangeCondition($field, "I", "BT", $from, $to);
+        }
+
+        /**
+         * Convert RANGE-type conditions into a structured array suitable for passing
+         * as SAP RFC TABLES parameters (e.g. T_S0BUKRS, T_S0DODT).
+         *
+         * Each field becomes a key in the output array, with its value being an array
+         * of rows containing SIGN, OPTION, LOW, HIGH — exactly as SAP expects.
+         *
+         * Example output:
+         * [
+         *     'T_S0BUKRS' => [
+         *         ['SIGN' => 'I', 'OPTION' => 'EQ', 'LOW' => '1000', 'HIGH' => ''],
+         *         ['SIGN' => 'I', 'OPTION' => 'EQ', 'LOW' => '4000', 'HIGH' => ''],
+         *     ],
+         *     'T_S0DODT' => [
+         *         ['SIGN' => 'I', 'OPTION' => 'EQ', 'LOW' => '20260311', 'HIGH' => ''],
+         *     ],
+         * ]
+         *
+         * Non-RANGE conditions (added via addCondition/addEqualCondition etc.) are ignored here.
+         * Use toSapOptions() for those.
+         *
+         * @return array<string, array<int, array{SIGN: string, OPTION: string, LOW: string, HIGH: string}>>
+         */
+        public function toRangeTables(): array {
+
+            $tables = [];
+
+            foreach ($this->conditions as $cond) {
+
+                if (($cond["operator"] ?? null) !== "RANGE") {
+                    continue;
+                }
+
+                $field = $cond["field"];
+
+                $tables[$field][] = [
+                    "SIGN"   => $cond["sign"],
+                    "OPTION" => $cond["option"],
+                    "LOW"    => $cond["low"],
+                    "HIGH"   => $cond["high"],
+                ];
+
+            }
+
+            return $tables;
 
         }
 
