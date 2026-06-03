@@ -146,9 +146,18 @@
                     $output[$rk] = $result[$rk] ?? [];
                     $metaMeta = $meta[$rk] ?? [];
 
+                    if (!is_array($output[$rk])) {
+                        $output[$rk] = DataUtils::castRFCValue($output[$rk], $metaMeta, $dateFormat, $castEmptyDecimalsToNull);
+                        continue;
+                    }
+
                     foreach ($output[$rk] as &$row) {
 
-                        $row = self::parseRow($row, $metaMeta["typedef"], $dateFormat, $castEmptyDecimalsToNull, $customCastMap);
+                        if (!is_array($row)) {
+                            continue;
+                        }
+
+                        $row = self::parseRow($row, $metaMeta["typedef"] ?? [], $dateFormat, $castEmptyDecimalsToNull, $customCastMap);
 
                     }
 
