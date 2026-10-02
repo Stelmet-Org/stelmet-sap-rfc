@@ -62,10 +62,11 @@
             array  $typeData,
             string $dateFormat = "Ymd",
             bool   $castEmptyDecimalsToNull = true,
+            bool   $trimValue = true,
         ): string|int|float|null {
 
             $type = $typeData["type"];
-            $trimmed = trim($value);
+            $trimmed = $trimValue ? trim($value) : $value;
 
             if ($trimmed === "") {
 
