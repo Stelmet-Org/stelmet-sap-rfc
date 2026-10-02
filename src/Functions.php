@@ -57,6 +57,7 @@
          *                                  return a cast value. Callables will be invoked with the
          *                                  signature: ($rawValue)
          * @param string|array $resultKey The key in the RFC result array that contains the main table data, or an array of keys if multiple tables are expected. Default is "RT_RESULT".
+         * @param array $dontTrimKeys Array of field names that should not be trimmed.
          *
          * @return array Parsed result: for normal table-based RFCs an array of row arrays; for
          *               text-only results an array of parsed rows as determined by parseTextOnlyData().
@@ -74,6 +75,7 @@
             bool         $castEmptyDecimalsToNull = true,
             ?array       $customCastMap = null,
             string|array $resultKey = "RT_RESULT",
+            array        $dontTrimKeys = [],
         ): array {
 
             $function = $connection->getFunction($functionName);
@@ -147,8 +149,17 @@
                     $metaMeta = $meta[$rk] ?? [];
 
                     if (!is_array($output[$rk])) {
-                        $output[$rk] = DataUtils::castRFCValue($output[$rk], $metaMeta, $dateFormat, $castEmptyDecimalsToNull);
+
+                        $output[$rk] = DataUtils::castRFCValue(
+                            value: $output[$rk],
+                            typeData: $metaMeta,
+                            dateFormat: $dateFormat,
+                            castEmptyDecimalsToNull: $castEmptyDecimalsToNull,
+                            trimValue: !in_array($rk, $dontTrimKeys, true)
+                        );
+
                         continue;
+
                     }
 
                     foreach ($output[$rk] as &$row) {
@@ -157,7 +168,7 @@
                             continue;
                         }
 
-                        $row = self::parseRow($row, $metaMeta["typedef"] ?? [], $dateFormat, $castEmptyDecimalsToNull, $customCastMap);
+                        $row = self::parseRow($row, $metaMeta["typedef"] ?? [], $dateFormat, $castEmptyDecimalsToNull, $customCastMap, $dontTrimKeys);
 
                     }
 
@@ -200,10 +211,11 @@
          * @param array|null $customCastMap Optional map for text-only parsing where keys are column names
          *                                  and values are callables that will receive the raw field value
          *                                  and may return a custom cast value.
+         * @param array $dontTrimKeys Array of field names that should not be trimmed.
          *
          * @return array Parsed associative row with proper PHP types (strings, ints, floats, null, DateTime strings, etc.).
          */
-        private static function parseRow(array $rowData, array $meta, string $dateFormat, bool $castEmptyDecimalsToNull, ?array $customCastMap = null): array {
+        private static function parseRow(array $rowData, array $meta, string $dateFormat, bool $castEmptyDecimalsToNull, ?array $customCastMap = null, array $dontTrimKeys = []): array {
 
             $result = [];
 
@@ -224,7 +236,13 @@
                     continue;
                 }
 
-                $result[$fieldName] = DataUtils::castRFCValue($fieldValue, $typeData, $dateFormat, $castEmptyDecimalsToNull);
+                $result[$fieldName] = DataUtils::castRFCValue(
+                    value                  : $fieldValue,
+                    typeData               : $typeData,
+                    dateFormat             : $dateFormat,
+                    castEmptyDecimalsToNull: $castEmptyDecimalsToNull,
+                    trimValue              : !in_array($fieldName, $dontTrimKeys, true),
+                );
 
             }
 
